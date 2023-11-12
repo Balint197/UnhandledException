@@ -1,9 +1,9 @@
 # Installation
 
-`pip install chainlit`
+`pip install chainlit openai 	`
 
 # Run
 
 ```bash
-chainlit run app.py -w
+	chainlit run app.py -w
 ```
