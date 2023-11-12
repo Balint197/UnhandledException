@@ -11,11 +11,19 @@ import os
 client = AsyncOpenAI(api_key="")
 
 
-template = """SQL tables (and columns):
-* Customers(customer_id, signup_date)
-* Streaming(customer_id, video_id, watch_date, watch_minutes)
+sysTemplate = """You are a helpful financial budget planning assistant. 
+Your goal is to ask the user for their financial health, and find out the 
+following information about them with successive questions: 
+monthly loan amount, vacation budget, salary. 
+After you find out this information, return it in  brackets, formatted in
+ the following way: {vacation: 1200}, etc. 
+ """
 
-A well-written SQL query that {input}:
+template = """Help me plan my finances! Ask me about my financial health, and find out 
+following information about them with successive questions: 
+monthly loan amount, vacation budget, salary. 
+After you find out this information, return it in  brackets, formatted in
+ the following way: {vacation: 1200}, etc.{input}
 ```"""
 
 
@@ -30,7 +38,6 @@ settings = {
 }
 
 
-
 @cl.on_message
 async def main(message: cl.Message):
     # Create the prompt object for the Prompt Playground
@@ -38,10 +45,15 @@ async def main(message: cl.Message):
         provider=ChatOpenAI.id,
         messages=[
             PromptMessage(
+                role="system",
+                template=sysTemplate,
+                formatted=template.format(input=message.content),
+            ),
+            PromptMessage(
                 role="user",
                 template=template,
-                formatted=template.format(input=message.content)
-            )
+                formatted=template.format(input=message.content),
+            ),
         ],
         settings=settings,
         inputs={"input": message.content},
