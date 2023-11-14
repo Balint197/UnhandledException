@@ -1,3 +1,2 @@
 chainlit == 0.7.501
-openai == 1.2.3
-python-decouple
+openai == 1.2.3w

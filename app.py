@@ -31,8 +31,8 @@ template = """{input}"""
 
 
 settings = {
-    "model": "gpt-4-1106-preview",
-    # "model": "gpt-3.5-turbo",
+    #"model": "gpt-4-1106-preview",
+    "model": "gpt-3.5-turbo",
     "temperature": 0.2,
     "max_tokens": 256,
     "top_p": 1,
