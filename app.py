@@ -1,20 +1,22 @@
 import chainlit as cl
 from chainlit.prompt import Prompt, PromptMessage
 from chainlit.playground.providers.openai import ChatOpenAI
-from decouple import config
-import re, json
-
+from chainlit.prompt import Prompt, PromptMessage
 from openai import AsyncOpenAI
-import os
+import re, json, os
 
 
-client = AsyncOpenAI(api_key="")
+api_key = os.environ.get("OPENAI_API_KEY")
+client = AsyncOpenAI(api_key=api_key)
 
-setupTemplate = """You are a helpful and very kind financial budget planning
+
+# monthly loan amount, vacation budget, salary.
+
+systemPromptBeforeBudget = """You are a helpful and very kind financial budget planning
  assistant. Your goal is to ask the user for their financial health, 
- and find out the following information about them with successive 
- questions: monthly loan amount, vacation budget, salary. If the user 
- gives this information in partial amounts, make sure to add them up, 
+ and find out the following information about them with successive questions: 
+ monthly loan amount, vacation budget.
+ If the user gives this information in partial amounts, make sure to add them up, 
  and only return the total cost for these. As soon as you find out this 
  information, don't write anything else, just return it formatted in 
  the following way, using brackets, etc. Don't use any special symbols 
@@ -24,93 +26,174 @@ setupTemplate = """You are a helpful and very kind financial budget planning
  Desired output format: JSON where the keys are: vacation, salary, loan. The values
  should be their respective numerical values. 
 """
-#
-# You are a personal finance advisor, providing guidance on budgeting, saving, investing, and managing debt. Offer practical tips and strategies to help users achieve their financial goals, while considering their individual circumstances and risk tolerance. Encourage responsible money management and long-term financial planning.
 
-template = """{input}"""
+systemPromptAfterBudget = """
+You are a personal finance advisor, providing guidance on budgeting, saving, 
+investing, and managing debt. Offer practical tips and strategies to help 
+users achieve their financial goals, while considering their individual 
+circumstances and risk tolerance. Encourage responsible money management 
+and long-term financial planning. The user has given the following information 
+about their monetary budget situation: vacation: {{budget_json.vacation}}, 
+salary: {{budget_json.salary}}, loan: {{budget_json.loan}}.
+"""
 
+
+gotBudgetStatus: bool = False
+# budgetRegex: re.Pattern = re.compile("\{(?:vacation|salary|loan): \d+(?:, (?:vacation|salary|loan): \d+)*\}")
+session_names = ["before_setup", "after_setup"]
+budget_json = None
+
+
+
+
+
+# Example dummy function hard coded to return the same weather
+# In production, this could be your backend API or an external API
+def get_current_weather(location, unit):
+    """Get the current weather in a given location"""
+    unit = unit or "Farenheit"
+    weather_info = {
+        "location": location,
+        "temperature": "72",
+        "unit": unit,
+        "forecast": ["sunny", "windy"],
+    }
+
+    return json.dumps(weather_info)
+
+
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_current_weather",
+            "description": "Get the current weather in a given location",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {
+                        "type": "string",
+                        "description": "The city and state, e.g. San Francisco, CA",
+                    },
+                    "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
+                },
+                "required": ["location"],
+            },
+        },
+    }
+]
 
 settings = {
+    "model": "gpt-4",
     #"model": "gpt-4-1106-preview",
-    "model": "gpt-3.5-turbo",
+    #"model": "gpt-3.5-turbo",
     "temperature": 0.2,
     "max_tokens": 256,
     "top_p": 1,
     "frequency_penalty": 0,
     "presence_penalty": 0,
     "stop": ["```"],
+    "tools": tools,
+    "tool_choice": "auto",
 }
 
-gotBudgetStatus: bool = False
-# budgetRegex: re.Pattern = re.compile("\{(?:vacation|salary|loan): \d+(?:, (?:vacation|salary|loan): \d+)*\}")
 
-sysPrompt = Prompt(
-    provider=ChatOpenAI.id,
-    completion="The openai completion",
-    messages=[
-        PromptMessage(role="system", template=setupTemplate, formatted=setupTemplate),
-    ],
-    settings=settings,
-    #inputs={"input": message.content},
-)
+@cl.action_callback("confirm_action")
+async def on_action(action: cl.Action):
+    if action.value == "ok":
+        content = "Confirmed!"
+    elif action.value == "not_ok":
+        content = "Rejected!"
+    else:
+        await cl.ErrorMessage(content="Invalid action").send()
+        return
+
+    prev_msg = cl.user_session.get("msg")  # type: cl.Message
+    if prev_msg:
+        await prev_msg.remove_actions()
+        cl.user_session.set("msg", None)
+
+    await cl.Message(content=content).send()
+
 
 
 @cl.on_chat_start
-async def start():
-    await cl.Message(
-        content="Welcome! I will be your financial advisor. To start, please give me your monthly loan amount. ",
-        prompt=sysPrompt,
-    ).send()
+async def start_chat():
+
+    # approve_action = cl.Action(name="confirm_action", value="ok", label="Confirm")
+    # reject_action = cl.Action(name="confirm_action", value="not_ok", label="Reject")
+    # actions = [approve_action, reject_action]
+
+    msg = cl.Message(
+        content="Hi, I will help you plan your finances. First, please let me know your monthly loan payment amount!",
+        #actions=actions,
+    )
+
+    cl.user_session.set("msg", "Hi, I will help you plan your finances. First, please let me know your monthly loan payment amount!")
+
+    await msg.send()
+
+
+
+
+
+    # cl.user_session.set(
+    #     session_names[0],
+    #     [
+    #         {"role": "system", "content": systemPromptBeforeBudget}
+    #     ],
+    # )
 
 
 @cl.on_message
 async def main(message: cl.Message):
-    # Create the prompt object for the Prompt Playground
+    global gotBudgetStatus
+    if gotBudgetStatus == False:
+        message_history = cl.user_session.get(session_names[0])
+        message_history.append({"role": "assistant", "content": "Hi, I will help you plan your finances. First, please let me know your monthly loan payment amount!"})
+        message_history.append({"role": "user", "content": message.content})
 
-    prompt = Prompt(
-        provider=ChatOpenAI.id,
-        #completion="The openai completion",
-        messages=[
-            #            PromptMessage(role="system", template=setupTemplate, formatted=setupTemplate),
-            PromptMessage(
-                role="user",
-                template=template,
-                formatted=template.format(input=message.content),
-            ),
-        ],
-        settings=settings,
-        inputs={"input": message.content},
-    )
+        approve_action = cl.Action(name="confirm_action", value="ok", label="Confirm")
+        reject_action = cl.Action(name="confirm_action", value="not_ok", label="Reject")
+        actions = [approve_action, reject_action]
 
-    # Prepare the message for streaming
-    msg = cl.Message(
-        content="",
-        language="python",
-    )
+        msg = cl.Message(
+            content="", 
+            actions=actions)
+        await msg.send()
 
-    # Call OpenAI
+        stream = await client.chat.completions.create(
+            messages=message_history, stream=True, **settings
+        )
 
-    stream = await client.chat.completions.create(
-        messages=[m.to_openai() for m in prompt.messages], stream=True, **settings
-    )
+        async for part in stream:
+            if token := part.choices[0].delta.content or "":
+                await msg.stream_token(token)
 
-    async for part in stream:
-        if token := part.choices[0].delta.content or "":
-            await msg.stream_token(token)
+        message_history.append({"role": "assistant", "content": msg.content})
+        await msg.update()
 
-    # Update the prompt object with the completion
-    prompt.completion = msg.content
-    msg.prompt = prompt
+        if extract_json_from_string(msg.content) != None:
+            budget_json = extract_json_from_string(msg.content)
+            gotBudgetStatus = True
+            print(systemPromptAfterBudget)
+            print(systemPromptAfterBudget.format(budget_json=budget_json))
+            message_history.append({"role": "system", "content": systemPromptAfterBudget})
 
-    try:
-        budgetInfo = json.loads(prompt.completion)
-        gotBudgetStatus = True
-        print(budgetInfo)
-    except:
-        pass
 
-    #    if (budgetRegex.search(prompt.completion)):
-    #       print(budgetInfo)
+def extract_json_from_string(input_string):
+    # Find the start and end indices of the JSON object
+    start_index = input_string.find("{")
+    end_index = input_string.rfind("}")
 
-    # Send and close the message stream
-    await msg.send()
+    # Check if both start and end indices are found
+    if start_index != -1 and end_index != -1:
+        # Extract the JSON object substring
+        json_str = input_string[start_index : end_index + 1]
+
+        try:
+            # Parse the JSON object
+            json_data = json.loads(json_str)
+            return json_data
+        except json.JSONDecodeError as e:
+            print(f"Error parsing JSON: {e}")
