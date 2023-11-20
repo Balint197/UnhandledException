@@ -7,67 +7,47 @@ from datetime import datetime, timedelta
 from openai import AsyncOpenAI
 import re, json, os
 
-
-api_key = os.environ.get("OPENAI_API_KEY")
-client = AsyncOpenAI(api_key=api_key)
+client = AsyncOpenAI(api_key="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")
 
 
-# monthly loan amount, vacation budget, salary.
-
-systemPromptBeforeBudget = """You are a helpful and very kind financial budget planning
- assistant. Your goal is to ask the user for their financial health, 
- and find out the following information about them with successive questions: 
- monthly loan amount, vacation budget.
- If the user gives this information in partial amounts, make sure to add them up, 
- and only return the total cost for these. As soon as you find out this 
- information, don't write anything else, just return it formatted in 
- the following way, using brackets, etc. Don't use any special symbols 
- for currency, only return the numbers. If the values are unknown, or zero, write 0. 
- Don't attempt to respond with the output before you have asked every question you need
- to find out the desired information. 
- Desired output format: JSON where the keys are: vacation, salary, loan. The values
- should be their respective numerical values. 
-"""
-
-systemPromptAfterBudget = """
-You are a personal finance advisor, providing guidance on budgeting, saving, 
-investing, and managing debt. Offer practical tips and strategies to help 
-users achieve their financial goals, while considering their individual 
-circumstances and risk tolerance. Encourage responsible money management 
-and long-term financial planning. The user has given the following information 
-about their monetary budget situation: vacation: {{budget_json.vacation}}, 
-salary: {{budget_json.salary}}, loan: {{budget_json.loan}}.
+systemPromptBeforeBudget = """Te egy segítőkész és nagyon kedves pénzügyi költségvetési tervező asszisztens vagy. 
+A célod az, hogy megkérdezd a felhasználót a pénzügyi helyzetükről, és kérdésekkel derítsd ki róluk a 
+következő információkat: havi hitelösszeg, nyaralási költség, havi fizetés. Ha a felhasználó részletekben adja meg ezen 
+információkat, győződj meg róla, hogy összeadod azokat, és csak a teljes költséget add vissza eredményként. 
+Amint kiderülnek ezek az információk, add formázd a megadott módon. Ne használj különleges szimbólumokat a 
+pénznemre, csak a számokat add vissza. Ha az értékek nismeretlenek vagy nulla, írj 0-t. Ne próbálj válaszolni 
+a kimenettel, mielőtt minden olyan kérdést feltennél, amire szükséged van a kívánt információk megszerzéséhez.
+Kívánt kimeneti formátum: JSON, ahol a kulcsok a következők: vakáció, nyaralás, hitel. 
+Az értékek legyenek a megfelelő számszerű értékek. 
+Miután visszaadtad a kimenetet, a felhasználó kérdéseire egy pénzügyi költségvetési tervező asszisztens szerepében válaszolj.
+Amennyiben szükséges, használd a rendelkezésedre álló eszközöket. 
 """
 
 
 gotBudgetStatus: bool = False
 # budgetRegex: re.Pattern = re.compile("\{(?:vacation|salary|loan): \d+(?:, (?:vacation|salary|loan): \d+)*\}")
-session_names = ["before_setup", "after_setup"]
 budget_json = None
 
 
+settings = {
+    "model": "gpt-4-1106-preview",
+    # "model": "gpt-3.5-turbo",
+    "temperature": 0.2,
+    "max_tokens": 256,
+    "top_p": 1,
+    "frequency_penalty": 0,
+    "presence_penalty": 0,
+    "stop": ["```"],
+    "tools": tools,
+    "tool_choice": "auto",
+}
 
-
-
-# Example dummy function hard coded to return the same weather
-# In production, this could be your backend API or an external API
-def get_current_weather(location, unit):
-    """Get the current weather in a given location"""
-    unit = unit or "Farenheit"
-    weather_info = {
-        "location": location,
-        "temperature": "72",
-        "unit": unit,
-        "forecast": ["sunny", "windy"],
-    }
-
-    return json.dumps(weather_info)
 
 def get_conversion_rate_of_currencies(currency_1, currency_2):
     """Get the current conversion rate between two currencies"""
     currency_1 = currency_1.upper()
     currency_2 = currency_2.upper()
-    api_key = "API KEY"  #your https://currencyapi.com/docs/convert API key
+    api_key = "cur_live_O8lr4Uj4Nq0TeugOVUwxDg7ruGMhclEJtFTFsfGr"  #your https://currencyapi.com/docs/convert API key
     url = "https://api.currencyapi.com/v3/latest"
     headers = {
         'apikey': api_key,
@@ -102,46 +82,26 @@ def get_balance_of_latest_month():
             "Month": month,
             "Net": "120000",
         }
-    return json.dumps(currency_info)
+    return json.dumps(balance_info)
     
-    
-
 
 
 tools = [
     {
         "type": "function",
         "function": {
-            "name": "get_current_weather",
-            "description": "Get the current weather in a given location",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "location": {
-                        "type": "string",
-                        "description": "The city and state, e.g. San Francisco, CA",
-                    },
-                    "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
-                },
-                "required": ["location"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "get_conversion_rate_of_currencies",
-            "description": "Get the current conversion rate between two currencies",
+            "description": "Megadja az átváltási arányt két pénznem között",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "currency_1": {
                         "type": "string",
-                        "description": "The code of the first currency",
+                        "description": "Az első pénznem jele",
                     },
                     "currency_2": {
                         "type": "string",
-                        "description": "The code of the second currency",
+                        "description": "A második pénznem jele",
                     },
                 },
                 "required": ["currency_1", "currency_2"],
@@ -152,109 +112,57 @@ tools = [
         "type": "function",
         "function": {
             "name": "get_balance_of_latest_month",
-            "description": "Get the balance of my incomes and expenditures from the latest month",
+            "description": "A legutóbbi hónapban keletkezett bevételek és kiadások egyenlegét adja meg",
             "parameters": {},
             },
         },
     }
 ]
 
-settings = {
-    "model": "gpt-4",
-    #"model": "gpt-4-1106-preview",
-    #"model": "gpt-3.5-turbo",
-    "temperature": 0.2,
-    "max_tokens": 256,
-    "top_p": 1,
-    "frequency_penalty": 0,
-    "presence_penalty": 0,
-    "stop": ["```"],
-    "tools": tools,
-    "tool_choice": "auto",
-}
-
-
-@cl.action_callback("confirm_action")
-async def on_action(action: cl.Action):
-    if action.value == "ok":
-        content = "Confirmed!"
-    elif action.value == "not_ok":
-        content = "Rejected!"
-    else:
-        await cl.ErrorMessage(content="Invalid action").send()
-        return
-
-    prev_msg = cl.user_session.get("msg")  # type: cl.Message
-    if prev_msg:
-        await prev_msg.remove_actions()
-        cl.user_session.set("msg", None)
-
-    await cl.Message(content=content).send()
-
 
 
 @cl.on_chat_start
 async def start_chat():
-
-    # approve_action = cl.Action(name="confirm_action", value="ok", label="Confirm")
-    # reject_action = cl.Action(name="confirm_action", value="not_ok", label="Reject")
-    # actions = [approve_action, reject_action]
-
-    msg = cl.Message(
-        content="Hi, I will help you plan your finances. First, please let me know your monthly loan payment amount!",
-        #actions=actions,
+    cl.user_session.set(
+        "message_history",
+        [{"role": "system", "content": systemPromptBeforeBudget}],
     )
 
-    cl.user_session.set("msg", "Hi, I will help you plan your finances. First, please let me know your monthly loan payment amount!")
+    msg = cl.Message(
+        content="Szia, a pénzügyeid tervezésében szeretnék segíteni 😊 Először kérlek, mond meg nekem, mennyi a havi hiteltörlesztőd összege!",
+    )
 
     await msg.send()
-
-
-
-
-
-    # cl.user_session.set(
-    #     session_names[0],
-    #     [
-    #         {"role": "system", "content": systemPromptBeforeBudget}
-    #     ],
-    # )
-
 
 @cl.on_message
 async def main(message: cl.Message):
     global gotBudgetStatus
-    if gotBudgetStatus == False:
-        message_history = cl.user_session.get(session_names[0])
-        message_history.append({"role": "assistant", "content": "Hi, I will help you plan your finances. First, please let me know your monthly loan payment amount!"})
-        message_history.append({"role": "user", "content": message.content})
+    message_history = cl.user_session.get("message_history")
+    message_history.append(
+        {
+            "role": "user",
+            "content": message.content,
+        }
+    )
 
-        approve_action = cl.Action(name="confirm_action", value="ok", label="Confirm")
-        reject_action = cl.Action(name="confirm_action", value="not_ok", label="Reject")
-        actions = [approve_action, reject_action]
+    msg = cl.Message(content="")
+    await msg.send()
 
-        msg = cl.Message(
-            content="", 
-            actions=actions)
-        await msg.send()
+    stream = await client.chat.completions.create(
+        messages=message_history, stream=True, **settings
+    )
 
-        stream = await client.chat.completions.create(
-            messages=message_history, stream=True, **settings
-        )
+    async for part in stream:
+        if token := part.choices[0].delta.content or "":
+            await msg.stream_token(token)
 
-        async for part in stream:
-            if token := part.choices[0].delta.content or "":
-                await msg.stream_token(token)
+    message_history.append({"role": "assistant", "content": msg.content})
+    await msg.update()
 
-        message_history.append({"role": "assistant", "content": msg.content})
-        await msg.update()
+    if extract_json_from_string(msg.content) != None:
+        budget_json = extract_json_from_string(msg.content)
+        gotBudgetStatus = True
 
-        if extract_json_from_string(msg.content) != None:
-            budget_json = extract_json_from_string(msg.content)
-            gotBudgetStatus = True
-            print(systemPromptAfterBudget)
-            print(systemPromptAfterBudget.format(budget_json=budget_json))
-            message_history.append({"role": "system", "content": systemPromptAfterBudget})
 
 
 def extract_json_from_string(input_string):
