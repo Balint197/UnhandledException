@@ -1,5 +1,6 @@
 import json, requests
 
+
 def get_conversion_rate_of_currencies(currency_1, currency_2):
     """Get the current conversion rate between two currencies"""
     currency_1 = currency_1.upper()
@@ -52,3 +53,34 @@ def get_balance_of_latest_month():
         "Net": "120000",
     }
     return json.dumps(balance_info)
+
+
+def store_budget(vakacio: int, fizetes: int, torleszto: int):
+    """Store my budget in the database"""
+    budget_info = {
+        "vakacio": vakacio,
+        "fizetes": fizetes,
+        "torleszto": torleszto,
+    }
+    return json.dumps(budget_info)
+
+
+def calculate_budget(budget_json):
+    print(budget_json)
+    print(type(budget_json))
+    budget = json.loads(budget_json)
+    print(type(budget["fizetes"]))
+    print(budget["fizetes"])
+    # Calculate annual salary
+    annual_salary = budget["fizetes"] * 12
+
+    # Calculate remaining budget after deducting monthly loan
+    remaining_budget = annual_salary - (budget["torleszto"] * 12)
+
+    # Deduct annual vacation budget
+    remaining_budget -= budget["vakacio"]
+
+    # Calculate monthly budget after considering the monthly loan and annual vacation budget
+    monthly_budget = remaining_budget / 12
+
+    return str(monthly_budget)

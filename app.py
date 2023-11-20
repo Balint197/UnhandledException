@@ -7,7 +7,12 @@ import ast
 from openai import AsyncOpenAI
 import re, json, os
 
-from tools import get_conversion_rate_of_currencies, get_balance_of_latest_month
+from tools import (
+    get_conversion_rate_of_currencies,
+    get_balance_of_latest_month,
+    store_budget,
+    calculate_budget,
+)
 
 
 client = AsyncOpenAI(api_key="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")
@@ -17,14 +22,16 @@ systemPromptBeforeBudget = """Te egy segítőkész és nagyon kedves pénzügyi 
 A célod az, hogy megkérdezd a felhasználót a pénzügyi helyzetükről, és kérdésekkel derítsd ki róluk a 
 következő információkat: havi hitelösszeg, nyaralási költség, havi fizetés. Ha a felhasználó részletekben adja meg ezen 
 információkat, győződj meg róla, hogy összeadod azokat, és csak a teljes költséget add vissza eredményként. 
-Amint kiderülnek ezek az információk, add formázd a megadott módon. Ne használj különleges szimbólumokat a 
-pénznemre, csak a számokat add vissza. Ha az értékek nismeretlenek vagy nulla, írj 0-t. Ne próbálj válaszolni 
-a kimenettel, mielőtt minden olyan kérdést feltennél, amire szükséged van a kívánt információk megszerzéséhez.
-Kívánt kimeneti formátum: JSON, ahol a kulcsok a következők: vakáció, nyaralás, hitel. 
-Az értékek legyenek a megfelelő számszerű értékek. 
-Miután visszaadtad a kimenetet, a felhasználó kérdéseire egy pénzügyi költségvetési tervező asszisztens szerepében válaszolj.
-Amennyiben szükséges, használd a rendelkezésedre álló eszközöket. 
+Amint kiderülnek ezek az információk, tárold el azokat. 
 """
+
+# , formázd a megadott módon. Ne használj különleges szimbólumokat a
+# pénznemre, csak a számokat add vissza. Ha az értékek ismeretlenek vagy nulla, írj 0-t. Ne próbálj válaszolni
+# a kimenettel, mielőtt minden olyan kérdést feltennél, amire szükséged van a kívánt információk megszerzéséhez.
+# Kívánt kimeneti formátum: JSON, ahol a kulcsok a következők: vakáció, nyaralás, hitel.
+# Az értékek legyenek a megfelelő számszerű értékek.
+# Miután visszaadtad a kimenetet, a felhasználó kérdéseire egy pénzügyi költségvetési tervező asszisztens szerepében válaszolj.
+# Amennyiben szükséges, használd a rendelkezésedre álló eszközöket.
 
 MAX_ITER = 5
 gotBudgetStatus: bool = False
@@ -57,6 +64,42 @@ tools = [
     {
         "type": "function",
         "function": {
+            "name": "store_budget",
+            "description": "Eltárolja a költségvetési adatokat",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "vakacio": {
+                        "type": "number",
+                        "description": "A vakáció költsége",
+                    },
+                    "fizetes": {
+                        "type": "number",
+                        "description": "A havi fizetés",
+                    },
+                    "torleszto": {
+                        "type": "number",
+                        "description": "A havi törlesztőrészlet",
+                    },
+                },
+                "required": ["vakacio", "fizetes", "torleszto"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calculate_budget",
+            "description": "Kiszámolja a felhasználó költségvetését, és visszaadja a havi fennmaradt költségvetést",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_balance_of_latest_month",
             "description": "A legutóbbi hónapban keletkezett bevételek és kiadások egyenlegét adja meg",
             "parameters": {
@@ -66,20 +109,6 @@ tools = [
         },
     },
 ]
-
-
-settings = {
-    "model": "gpt-4-1106-preview",
-    # "model": "gpt-3.5-turbo",
-    "temperature": 0.2,
-    "max_tokens": 256,
-    "top_p": 1,
-    "frequency_penalty": 0,
-    "presence_penalty": 0,
-    "stop": ["```"],
-    "tools": tools,
-    "tool_choice": "auto",
-}
 
 
 @cl.on_chat_start
@@ -98,7 +127,7 @@ async def start_chat():
 
 @cl.on_message
 async def main(message: cl.Message):
-    global gotBudgetStatus, settings
+    global gotBudgetStatus, settings, budget_json
     message_history = cl.user_session.get("message_history")
     message_history.append(
         {
@@ -111,7 +140,14 @@ async def main(message: cl.Message):
 
     while cur_iter < MAX_ITER:
         settings = {
-            "model": "gpt-4",
+            "model": "gpt-4-1106-preview",
+            # "model": "gpt-3.5-turbo",
+            "temperature": 0.2,
+            "max_tokens": 256,
+            "top_p": 1,
+            "frequency_penalty": 0,
+            "presence_penalty": 0,
+            "stop": ["```"],
             "tools": tools,
             "tool_choice": "auto",
         }
@@ -157,6 +193,17 @@ async def main(message: cl.Message):
                     function_response = get_conversion_rate_of_currencies(
                         arguments.get("currency_1"), arguments.get("currency_2")
                     )
+                if function_name == "store_budget":
+                    function_response = store_budget(
+                        arguments.get("vakacio"),
+                        arguments.get("fizetes"),
+                        arguments.get("torleszto"),
+                    )
+                    budget_json = function_response
+
+                if function_name == "calculate_budget":
+                    function_response = calculate_budget(budget_json)
+
                 if function_name == "get_balance_of_latest_month":
                     function_response = get_balance_of_latest_month()
 
@@ -176,21 +223,3 @@ async def main(message: cl.Message):
                     parent_id=root_msg_id,
                 ).send()
         cur_iter += 1
-
-
-def extract_json_from_string(input_string):
-    # Find the start and end indices of the JSON object
-    start_index = input_string.find("{")
-    end_index = input_string.rfind("}")
-
-    # Check if both start and end indices are found
-    if start_index != -1 and end_index != -1:
-        # Extract the JSON object substring
-        json_str = input_string[start_index : end_index + 1]
-
-        try:
-            # Parse the JSON object
-            json_data = json.loads(json_str)
-            return json_data
-        except json.JSONDecodeError as e:
-            print(f"Error parsing JSON: {e}")
