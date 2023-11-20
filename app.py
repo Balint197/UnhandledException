@@ -7,8 +7,8 @@ from datetime import datetime, timedelta
 from openai import AsyncOpenAI
 import re, json, os
 
-from get_conversion_rate_of_currencies import get_conversion_rate_of_currencies
-from get_balance_of_latest_month import get_balance_of_latest_month
+from tools import get_conversion_rate_of_currencies, get_balance_of_latest_month
+
 
 client = AsyncOpenAI(api_key="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")
 
@@ -32,18 +32,6 @@ gotBudgetStatus: bool = False
 budget_json = None
 
 
-settings = {
-    "model": "gpt-4-1106-preview",
-    # "model": "gpt-3.5-turbo",
-    "temperature": 0.2,
-    "max_tokens": 256,
-    "top_p": 1,
-    "frequency_penalty": 0,
-    "presence_penalty": 0,
-    "stop": ["```"],
-    "tools": tools,
-    "tool_choice": "auto",
-}
 
 
 tools = [
@@ -78,6 +66,19 @@ tools = [
     },
 ]
 
+
+settings = {
+    "model": "gpt-4-1106-preview",
+    # "model": "gpt-3.5-turbo",
+    "temperature": 0.2,
+    "max_tokens": 256,
+    "top_p": 1,
+    "frequency_penalty": 0,
+    "presence_penalty": 0,
+    "stop": ["```"],
+    "tools": tools,
+    "tool_choice": "auto",
+}
 
 @cl.on_chat_start
 async def start_chat():

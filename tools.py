@@ -29,3 +29,26 @@ def get_conversion_rate_of_currencies(currency_1, currency_2):
         }
 
     return json.dumps(currency_info)
+
+
+def get_balance_of_latest_month():
+    """Get the balance of my incomes and expenditures from the latest month"""
+    m = datetime.today().month - 2
+    month = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+    ][m]
+    balance_info = {
+        "Month": month,
+        "Net": "120000",
+    }
+    return json.dumps(balance_info)
