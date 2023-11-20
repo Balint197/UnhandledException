@@ -64,7 +64,8 @@ def get_current_weather(location, unit):
 
 def get_conversion_rate_of_currencies(currency_1, currency_2):
     """Get the current conversion rate between two currencies"""
-    
+    currency_1 = currency_1.upper()
+    currency_2 = currency_2.upper()
     api_key = "API KEY"  #your https://currencyapi.com/docs/convert API key
     url = "https://api.currencyapi.com/v3/latest"
     headers = {
