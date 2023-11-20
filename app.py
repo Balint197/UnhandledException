@@ -2,6 +2,7 @@ import chainlit as cl
 from chainlit.prompt import Prompt, PromptMessage
 from chainlit.playground.providers.openai import ChatOpenAI
 import re, json, requests
+from datetime import datetime, timedelta
 
 from openai import AsyncOpenAI
 import re, json, os
@@ -84,13 +85,27 @@ def get_conversion_rate_of_currencies(currency_1, currency_2):
         }
     except Exception as e:
         print(e)
-        weather_info = {
+        currency_info = {
             "Currency 1": currency_1,
             "Currency 2": currency_2,
             "Conversion rate": "Unknown",
         }
 
-    return json.dumps(weather_info)
+    return json.dumps(currency_info)
+
+
+def get_balance_of_latest_month():
+    """Get the balance of my incomes and expenditures from the latest month"""
+    m = datetime.today().month - 2
+    month = ['Jan', 'Feb', 'Mar', 'Apr', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m]
+    balance_info = {
+            "Month": month,
+            "Net": "120000",
+        }
+    return json.dumps(currency_info)
+    
+    
+
 
 
 tools = [
@@ -130,6 +145,15 @@ tools = [
                     },
                 },
                 "required": ["currency_1", "currency_2"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_balance_of_latest_month",
+            "description": "Get the balance of my incomes and expenditures from the latest month",
+            "parameters": {},
             },
         },
     }
