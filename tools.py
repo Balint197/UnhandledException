@@ -15,7 +15,7 @@ def get_conversion_rate_of_currencies(currency_1, currency_2):
     try:
         response = requests.request("GET", url, headers=headers)
         val = response.json()["data"][currency_2]["value"]
-        weather_info = {
+        currency_info = {
             "Currency 1": currency_1,
             "Currency 2": currency_2,
             "Conversion rate": str(val),

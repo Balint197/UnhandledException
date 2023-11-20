@@ -3,7 +3,7 @@ from chainlit.prompt import Prompt, PromptMessage
 from chainlit.playground.providers.openai import ChatOpenAI
 import re, json, requests
 from datetime import datetime, timedelta
-
+import ast
 from openai import AsyncOpenAI
 import re, json, os
 
@@ -26,12 +26,10 @@ Miután visszaadtad a kimenetet, a felhasználó kérdéseire egy pénzügyi kö
 Amennyiben szükséges, használd a rendelkezésedre álló eszközöket. 
 """
 
-
+MAX_ITER = 5
 gotBudgetStatus: bool = False
 # budgetRegex: re.Pattern = re.compile("\{(?:vacation|salary|loan): \d+(?:, (?:vacation|salary|loan): \d+)*\}")
 budget_json = None
-
-
 
 
 tools = [
@@ -61,7 +59,10 @@ tools = [
         "function": {
             "name": "get_balance_of_latest_month",
             "description": "A legutóbbi hónapban keletkezett bevételek és kiadások egyenlegét adja meg",
-            "parameters": {},
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
         },
     },
 ]
@@ -80,6 +81,7 @@ settings = {
     "tool_choice": "auto",
 }
 
+
 @cl.on_chat_start
 async def start_chat():
     cl.user_session.set(
@@ -96,7 +98,7 @@ async def start_chat():
 
 @cl.on_message
 async def main(message: cl.Message):
-    global gotBudgetStatus
+    global gotBudgetStatus, settings
     message_history = cl.user_session.get("message_history")
     message_history.append(
         {
@@ -105,23 +107,75 @@ async def main(message: cl.Message):
         }
     )
 
-    msg = cl.Message(content="")
-    await msg.send()
+    cur_iter = 0
 
-    stream = await client.chat.completions.create(
-        messages=message_history, stream=True, **settings
-    )
+    while cur_iter < MAX_ITER:
+        settings = {
+            "model": "gpt-4",
+            "tools": tools,
+            "tool_choice": "auto",
+        }
 
-    async for part in stream:
-        if token := part.choices[0].delta.content or "":
-            await msg.stream_token(token)
+        prompt = Prompt(
+            provider="openai-chat",
+            messages=[
+                PromptMessage(
+                    formatted=m["content"], name=m.get("name"), role=m["role"]
+                )
+                for m in message_history
+            ],
+            settings=settings,
+        )
 
-    message_history.append({"role": "assistant", "content": msg.content})
-    await msg.update()
+        response = await client.chat.completions.create(
+            messages=message_history, **settings
+        )
 
-    if extract_json_from_string(msg.content) != None:
-        budget_json = extract_json_from_string(msg.content)
-        gotBudgetStatus = True
+        message = response.choices[0].message
+
+        prompt.completion = message.content or ""
+
+        root_msg_id = await cl.Message(
+            prompt=prompt, author=message.role, content=prompt.completion
+        ).send()
+
+        if not message.tool_calls:
+            break
+
+        for tool_call in message.tool_calls:
+            if tool_call.type == "function":
+                function_name = tool_call.function.name
+                arguments = ast.literal_eval(tool_call.function.arguments)
+                await cl.Message(
+                    author=function_name,
+                    content=str(tool_call.function),
+                    language="json",
+                    parent_id=root_msg_id,
+                ).send()
+
+                if function_name == "get_conversion_rate_of_currencies":
+                    function_response = get_conversion_rate_of_currencies(
+                        arguments.get("currency_1"), arguments.get("currency_2")
+                    )
+                if function_name == "get_balance_of_latest_month":
+                    function_response = get_balance_of_latest_month()
+
+                message_history.append(
+                    {
+                        "role": "function",
+                        "name": function_name,
+                        "content": function_response,
+                        "tool_call_id": tool_call.id,
+                    }
+                )
+
+                await cl.Message(
+                    author=function_name,
+                    content=str(function_response),
+                    language="json",
+                    parent_id=root_msg_id,
+                ).send()
+        cur_iter += 1
 
 
 def extract_json_from_string(input_string):
