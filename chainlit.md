@@ -11,3 +11,4 @@ Nyugodtan kezdj el chatelni a bottal a másik fülön. Az adataid felmérése ut
 * Adatbevitel fv.
 * Make bot more friendly to be in line with initial requirements defined in the slides (https://docs.google.com/presentation/d/18o7qqmzCh2r2BhN_Awf6-wtOFh_VSVIwQfU6q5rQ_0c/)
 * Speech2Text, document experimentation (check streamlit config)
+* buttons instead of natural typed function calls - check if data is ready before adding buttons  - check cookbook https://github.com/Chainlit/cookbook/
