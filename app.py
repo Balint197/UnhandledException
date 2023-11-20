@@ -1,7 +1,7 @@
 import chainlit as cl
 from chainlit.prompt import Prompt, PromptMessage
 from chainlit.playground.providers.openai import ChatOpenAI
-import re, json
+import re, json, requests
 
 from openai import AsyncOpenAI
 import re, json, os
@@ -62,6 +62,27 @@ def get_current_weather(location, unit):
 
     return json.dumps(weather_info)
 
+def get_conversion_rate_of_currencies(currency_1, currency_2):
+    """Get the current conversion rate between two currencies"""
+    
+    api_key = "API KEY"  #your https://currencyapi.com/docs/convert API key
+    url = "https://api.currencyapi.com/v3/latest"
+    headers = {
+        'apikey': api_key,
+        'value' : '1',
+        'base_currency' : currency_1,
+        'currencies' : currency_2
+    }
+    response = requests.request("GET", url, headers=headers)
+    val = response.json()['data'][currency_2]['value']
+    weather_info = {
+        "Currency 1": currency_1,
+        "Currency 2": currency_2,
+        "Conversion rate": str(val),
+    }
+
+    return json.dumps(weather_info)
+
 
 tools = [
     {
@@ -79,6 +100,27 @@ tools = [
                     "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
                 },
                 "required": ["location"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_conversion_rate_of_currencies",
+            "description": "Get the current conversion rate between two currencies",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "currency_1": {
+                        "type": "string",
+                        "description": "The code of the first currency",
+                    },
+                    "currency_2": {
+                        "type": "string",
+                        "description": "The code of the second currency",
+                    },
+                },
+                "required": ["currency_1", "currency_2"],
             },
         },
     }
