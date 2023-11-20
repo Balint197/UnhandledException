@@ -73,13 +73,21 @@ def get_conversion_rate_of_currencies(currency_1, currency_2):
         'base_currency' : currency_1,
         'currencies' : currency_2
     }
-    response = requests.request("GET", url, headers=headers)
-    val = response.json()['data'][currency_2]['value']
-    weather_info = {
-        "Currency 1": currency_1,
-        "Currency 2": currency_2,
-        "Conversion rate": str(val),
-    }
+    try:
+        response = requests.request("GET", url, headers=headers)
+        val = response.json()['data'][currency_2]['value']
+        weather_info = {
+            "Currency 1": currency_1,
+            "Currency 2": currency_2,
+            "Conversion rate": str(val),
+        }
+    except Exception as e:
+        print(e)
+        weather_info = {
+            "Currency 1": currency_1,
+            "Currency 2": currency_2,
+            "Conversion rate": "Unknown",
+        }
 
     return json.dumps(weather_info)
 
