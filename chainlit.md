@@ -1,14 +1,13 @@
-# Welcome to Chainlit! 🚀🤖
+# Üdvözlünk az Unhandled Exception személyes pénzügyi assziszensénél! 🚀🤖
 
-Hi there, Developer! 👋 We're excited to have you on board. Chainlit is a powerful tool designed to help you prototype, debug and share applications built on top of LLMs.
+Nyugodtan kezdj el chatelni a bottal a másik fülön. Az adataid felmérése után bővebb információhoz juthatsz pénzügyi helyzetedet illetően, valamint lépéseket tehetsz annak javításáért.
 
-## Useful Links 🔗
+### TODO
 
-- **Documentation:** Get started with our comprehensive [Chainlit Documentation](https://docs.chainlit.io) 📚
-- **Discord Community:** Join our friendly [Chainlit Discord](https://discord.gg/k73SQ3FyUh) to ask questions, share your projects, and connect with other developers! 💬
-
-We can't wait to see what you create with Chainlit! Happy coding! 💻😊
-
-## Welcome screen
-
-To modify the welcome screen, edit the `chainlit.md` file at the root of your project. If you do not want a welcome screen, just leave this file empty.
+* Change prompt to include more data - probably something like long, short term goals, income, regular payments, emergency
+* Change `calculate_budget` with this new data in mind.
+* Make investment module - really simple
+* OTP Persely mock + forgatókönyvek
+* Adatbevitel fv.
+* Make bot more friendly to be in line with initial requirements defined in the slides (https://docs.google.com/presentation/d/18o7qqmzCh2r2BhN_Awf6-wtOFh_VSVIwQfU6q5rQ_0c/)
+* Speech2Text, document experimentation (check streamlit config)
