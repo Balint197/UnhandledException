@@ -47,3 +47,4 @@ EXPOSE 8000
 
 # Run the application.
 CMD chainlit run app.py -w
+#CMD python agent.py

@@ -1,2 +1,2 @@
 chainlit == 0.7.501
-openai == 1.2.3w
+openai == 1.2.3
