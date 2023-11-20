@@ -66,11 +66,9 @@ def store_budget(vakacio: int, fizetes: int, torleszto: int):
 
 
 def calculate_budget(budget_json):
-    print(budget_json)
-    print(type(budget_json))
-    budget = json.loads(budget_json)
-    print(type(budget["fizetes"]))
-    print(budget["fizetes"])
+    # for some reason it gets passed as a string
+    budget = json.loads(budget_json) 
+
     # Calculate annual salary
     annual_salary = budget["fizetes"] * 12
 
@@ -83,4 +81,5 @@ def calculate_budget(budget_json):
     # Calculate monthly budget after considering the monthly loan and annual vacation budget
     monthly_budget = remaining_budget / 12
 
+    # format as string
     return str(monthly_budget)
