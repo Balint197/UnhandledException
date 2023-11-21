@@ -111,6 +111,8 @@ async def on_action(action: cl.Action):
         content = "Segíts a befektetéseimmel!"
     elif action.value == "exchange":
         content = "Hány forintot ér 500 amerikai dollár?"
+    elif action.value == "esg":
+        content = "Hogyan tudok úgy spórolni, hogy közben a környezetet is védem? Ha szükséges, kérdezz a személyes válaszadáshoz szükséges információkat tőlem!"
     else:
         await cl.ErrorMessage(content="Érvénytelen gomb").send()
         return
@@ -154,16 +156,19 @@ async def main(message: cl.Message):
     global settings, budget_json
 
     budget_action = cl.Action(
-        name="function_action", value="budget", label="Költségvetés számolása"
+        name="function_action", value="budget", label="💰 Költségvetés számolása"
     )
     investment_action = cl.Action(
-        name="function_action", value="investment", label="Befektetési tanácsadás"
+        name="function_action", value="investment", label="📈 Befektetési tanácsadás"
     )
     exchange_action = cl.Action(
-        name="function_action", value="exchange", label="Valutaváltás"
+        name="function_action", value="exchange", label="💱 Valutaváltás"
+    )
+    esg_action = cl.Action(
+        name="function_action", value="esg", label="🌍 Környezettudatos spórolás"
     )
     # actions = []
-    actions = [budget_action, investment_action, exchange_action]
+    actions = [budget_action, investment_action, exchange_action, esg_action]
     # if budget_json != None:
     #    actions = [budget_action, investment_action, exchange_action]
 
