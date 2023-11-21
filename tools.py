@@ -1,7 +1,7 @@
 import json, requests
 
 
-def get_conversion_rate_of_currencies(currency_1, currency_2):
+def get_conversion_rate_of_currencies(currency_1, currency_2, amount):
     """Get the current conversion rate between two currencies"""
     currency_1 = currency_1.upper()
     currency_2 = currency_2.upper()
@@ -20,6 +20,7 @@ def get_conversion_rate_of_currencies(currency_1, currency_2):
             "Currency 1": currency_1,
             "Currency 2": currency_2,
             "Conversion rate": str(val),
+            "Amount_out": val * amount
         }
     except Exception as e:
         print(e)

@@ -17,6 +17,8 @@ from tools import (
 
 client = AsyncOpenAI(api_key="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")
 
+MAX_ITER = 5  # how many times does it try to use tools in case of failure
+budget_json = None
 
 systemPromptBeforeBudget = """Te egy segítőkész és nagyon kedves pénzügyi költségvetési tervező asszisztens vagy. 
 A célod az, hogy megkérdezd a felhasználót a pénzügyi helyzetükről, és kérdésekkel derítsd ki róluk a 
@@ -25,26 +27,12 @@ információkat, győződj meg róla, hogy összeadod azokat, és csak a teljes 
 Amint kiderülnek ezek az információk, tárold el azokat. 
 """
 
-# , formázd a megadott módon. Ne használj különleges szimbólumokat a
-# pénznemre, csak a számokat add vissza. Ha az értékek ismeretlenek vagy nulla, írj 0-t. Ne próbálj válaszolni
-# a kimenettel, mielőtt minden olyan kérdést feltennél, amire szükséged van a kívánt információk megszerzéséhez.
-# Kívánt kimeneti formátum: JSON, ahol a kulcsok a következők: vakáció, nyaralás, hitel.
-# Az értékek legyenek a megfelelő számszerű értékek.
-# Miután visszaadtad a kimenetet, a felhasználó kérdéseire egy pénzügyi költségvetési tervező asszisztens szerepében válaszolj.
-# Amennyiben szükséges, használd a rendelkezésedre álló eszközöket.
-
-MAX_ITER = 5
-gotBudgetStatus: bool = False
-# budgetRegex: re.Pattern = re.compile("\{(?:vacation|salary|loan): \d+(?:, (?:vacation|salary|loan): \d+)*\}")
-budget_json = None
-
-
 tools = [
     {
         "type": "function",
         "function": {
             "name": "get_conversion_rate_of_currencies",
-            "description": "Megadja az átváltási arányt két pénznem között",
+            "description": "Megadja az átváltási arányt két pénznem között, az adott mennyiségben",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -56,8 +44,12 @@ tools = [
                         "type": "string",
                         "description": "A második pénznem jele",
                     },
+                    "amount": {
+                        "type": "number",
+                        "description": "A váltott pénz mennyisége",
+                    },
                 },
-                "required": ["currency_1", "currency_2"],
+                "required": ["currency_1", "currency_2", "amount"],
             },
         },
     },
@@ -111,6 +103,38 @@ tools = [
 ]
 
 
+@cl.action_callback("function_action")
+async def on_action(action: cl.Action):
+    if action.value == "budget":
+        content = "Határozd meg a költségvetési adataimat!"
+    elif action.value == "investment":
+        content = "Segíts a befektetéseimmel!"
+    elif action.value == "exchange":
+        content = "Hány forintot ér 500 amerikai dollár?"
+    else:
+        await cl.ErrorMessage(content="Érvénytelen gomb").send()
+        return
+
+    prev_msg = cl.user_session.get("message_history")  # type: cl.Message
+    if prev_msg:
+        # await prev_msg.remove_actions()
+        print("prev_msg: ")
+        prev_msg.append({"role": "user", "content": content})
+
+    msg = cl.Message(content=content)
+    await msg.send()
+    stream = await client.chat.completions.create(
+        messages=prev_msg, stream=True, **settings
+    )
+
+    async for part in stream:
+        if token := part.choices[0].delta.content or "":
+            await msg.stream_token(token)
+
+    prev_msg.append({"role": "assistant", "content": msg.content})
+    await msg.update()
+
+
 @cl.on_chat_start
 async def start_chat():
     cl.user_session.set(
@@ -127,7 +151,22 @@ async def start_chat():
 
 @cl.on_message
 async def main(message: cl.Message):
-    global gotBudgetStatus, settings, budget_json
+    global settings, budget_json
+
+    budget_action = cl.Action(
+        name="function_action", value="budget", label="Költségvetés számolása"
+    )
+    investment_action = cl.Action(
+        name="function_action", value="investment", label="Befektetési tanácsadás"
+    )
+    exchange_action = cl.Action(
+        name="function_action", value="exchange", label="Valutaváltás"
+    )
+    # actions = []
+    actions = [budget_action, investment_action, exchange_action]
+    # if budget_json != None:
+    #    actions = [budget_action, investment_action, exchange_action]
+
     message_history = cl.user_session.get("message_history")
     message_history.append(
         {
@@ -172,7 +211,10 @@ async def main(message: cl.Message):
         prompt.completion = message.content or ""
 
         root_msg_id = await cl.Message(
-            prompt=prompt, author=message.role, content=prompt.completion
+            prompt=prompt,
+            author=message.role,
+            content=prompt.completion,
+            actions=actions,
         ).send()
 
         if not message.tool_calls:
@@ -187,11 +229,14 @@ async def main(message: cl.Message):
                     content=str(tool_call.function),
                     language="json",
                     parent_id=root_msg_id,
+                    actions=[],
                 ).send()
 
                 if function_name == "get_conversion_rate_of_currencies":
                     function_response = get_conversion_rate_of_currencies(
-                        arguments.get("currency_1"), arguments.get("currency_2")
+                        arguments.get("currency_1"),
+                        arguments.get("currency_2"),
+                        arguments.get("amount"),
                     )
                 if function_name == "store_budget":
                     function_response = store_budget(
@@ -221,5 +266,6 @@ async def main(message: cl.Message):
                     content=str(function_response),
                     language="json",
                     parent_id=root_msg_id,
+                    actions=[],
                 ).send()
         cur_iter += 1
