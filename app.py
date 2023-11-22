@@ -7,25 +7,30 @@ import ast
 from openai import AsyncOpenAI
 import re, json, os
 
-from tools import (
-    get_conversion_rate_of_currencies,
-    get_balance_of_latest_month,
-    store_budget,
-    calculate_budget,
-)
+from tools import *
 
 
 client = AsyncOpenAI(api_key="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")
 
-MAX_ITER = 5  # how many times does it try to use tools in case of failure
+MAX_ITER = 3  # how many times does it try to use tools in case of failure
 budget_json = None
 
-systemPromptBeforeBudget = """Te egy segítőkész és nagyon kedves pénzügyi költségvetési tervező asszisztens vagy. 
-A célod az, hogy megkérdezd a felhasználót a pénzügyi helyzetükről, és kérdésekkel derítsd ki róluk a 
-következő információkat: havi hitelösszeg, nyaralási költség, havi fizetés. Ha a felhasználó részletekben adja meg ezen 
-információkat, győződj meg róla, hogy összeadod azokat, és csak a teljes költséget add vissza eredményként. 
-Amint kiderülnek ezek az információk, tárold el azokat. 
+# systemPromptBeforeBudget = """Te egy segítőkész és nagyon kedves pénzügyi költségvetési tervező asszisztens vagy.
+# A célod az, hogy megkérdezd a felhasználót a pénzügyi helyzetéről, és kérdésekkel derítsd ki róluk a
+# következő információkat: havi hitelösszeg, nyaralási költség, havi fizetés. Ha a felhasználó részletekben adja meg ezen
+# információkat, győződj meg róla, hogy összeadod azokat, és csak a teljes költséget add vissza eredményként.
+# Amint kiderülnek ezek az információk, tárold el azokat.
+# """
+systemPromptBeforeBudget = """Te egy segítőkész és nagyon kedves pénzügyi költségvetési tervező asszisztens vagy, aki tegeződik
+az ügyfelével.A célod az, hogy megkérdezd a felhasználót a pénzügyi helyzetéről, és kérdésekkel derítsd ki róluk a 
+következő információkat: havi fizetés és befektetésekből származó jövedelem; havi hitelösszeg, lakbér, ismétlődő havi kiadások;
+nyaralási költség. Ha a felhasználó részletekben adja meg ezen információkat, győződj meg róla, hogy összeadod 
+azokat, és csak a teljes költséget add vissza eredményként. Ha a felhasználó nem adja meg magától valamelyik információt, 
+kérdezz rá még egyszer. Ha azt mondja valamelyik értékre, hogy nem rendelkezik vele, az értéke nulla legyen.
+ Amint kiderülnek ezek az információk, csak tárold el azokat. Ne végezz el más lépéseket a felhasználó
+ kérése nélkül. 
 """
+
 
 tools = [
     {
@@ -53,17 +58,42 @@ tools = [
             },
         },
     },
+    # {
+    #     "type": "function",
+    #     "function": {
+    #         "name": "store_budget_old",
+    #         "description": "Eltárolja a költségvetési adatokat",
+    #         "parameters": {
+    #             "type": "object",
+    #             "properties": {
+    #                 "vakacio": {
+    #                     "type": "number",
+    #                     "description": "A vakáció költsége",
+    #                 },
+    #                 "fizetes": {
+    #                     "type": "number",
+    #                     "description": "A havi fizetés",
+    #                 },
+    #                 "torleszto": {
+    #                     "type": "number",
+    #                     "description": "A havi törlesztőrészlet",
+    #                 },
+    #             },
+    #             "required": ["vakacio", "fizetes", "torleszto"],
+    #         },
+    #     },
+    # },
     {
         "type": "function",
         "function": {
             "name": "store_budget",
-            "description": "Eltárolja a költségvetési adatokat",
+            "description": "Eltárolja a költségvetési adatokat, és visszaadja a havi bevételt, havi kiadásokat, valamint a tervezett nyaralás összegét.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "vakacio": {
+                    "befektetes": {
                         "type": "number",
-                        "description": "A vakáció költsége",
+                        "description": "A befektetésekből származó havi jövedelem",
                     },
                     "fizetes": {
                         "type": "number",
@@ -73,11 +103,41 @@ tools = [
                         "type": "number",
                         "description": "A havi törlesztőrészlet",
                     },
+                    "lakber": {
+                        "type": "number",
+                        "description": "A lakbér havi értéke",
+                    },
+                    "ismetlodo": {
+                        "type": "number",
+                        "description": "Az ismétlődő havi kiadások értéke",
+                    },
+                    "nyaralas": {
+                        "type": "number",
+                        "description": "A nyaralás költsége",
+                    },
                 },
-                "required": ["vakacio", "fizetes", "torleszto"],
+                "required": [
+                    "befektetes",
+                    "fizetes",
+                    "torleszto",
+                    "lakber",
+                    "ismetlodo",
+                    "nyaralas",
+                ],
             },
         },
     },
+    # {
+    #     "type": "function",
+    #     "function": {
+    #         "name": "calculate_budget_old",
+    #         "description": "Kiszámolja a felhasználó költségvetését, és visszaadja a havi fennmaradt költségvetést",
+    #         "parameters": {
+    #             "type": "object",
+    #             "properties": {},
+    #         },
+    #     },
+    # },
     {
         "type": "function",
         "function": {
@@ -86,6 +146,23 @@ tools = [
             "parameters": {
                 "type": "object",
                 "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "plan_vacation",
+            "description": "Megtervezi a felhasználó nyaralását. Megadja azt az összeget, amit havonta félre kell raknia a felhasználónak, hogy ki tudja fizetni a nyaralást. ",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nyaralas_ido": {
+                        "type": "number",
+                        "description": "Kifejezi, hogy a tervezett nyaralás hány hónap múlva valósuljon meg",
+                    },
+                },
+                "required": ["nyaralas_ido"],
             },
         },
     },
@@ -113,6 +190,8 @@ async def on_action(action: cl.Action):
         content = "Hány forintot ér 500 amerikai dollár?"
     elif action.value == "esg":
         content = "Hogyan tudok úgy spórolni, hogy közben a környezetet is védem? Ha szükséges, kérdezz a személyes válaszadáshoz szükséges információkat tőlem!"
+    elif action.value == "vacation":
+        content = "Segíts megtervezni a következő nyaralásomra való spórolást!"
     else:
         await cl.ErrorMessage(content="Érvénytelen gomb").send()
         return
@@ -156,10 +235,10 @@ async def main(message: cl.Message):
     global settings, budget_json
 
     budget_action = cl.Action(
-        name="function_action", value="budget", label="💰 Költségvetés számolása"
+        name="function_action", value="budget", label="💰 Költségvetés"
     )
     investment_action = cl.Action(
-        name="function_action", value="investment", label="📈 Befektetési tanácsadás"
+        name="function_action", value="investment", label="📈 Befektetés"
     )
     exchange_action = cl.Action(
         name="function_action", value="exchange", label="💱 Valutaváltás"
@@ -167,10 +246,18 @@ async def main(message: cl.Message):
     esg_action = cl.Action(
         name="function_action", value="esg", label="🌍 Környezettudatos spórolás"
     )
+    vacation_action = cl.Action(
+        name="function_action", value="vacation", label="🏝️ Nyaralás"
+    )
     # actions = []
-    actions = [budget_action, investment_action, exchange_action, esg_action]
     # if budget_json != None:
-    #    actions = [budget_action, investment_action, exchange_action]
+    actions = [
+        budget_action,
+        investment_action,
+        exchange_action,
+        esg_action,
+        vacation_action,
+    ]
 
     message_history = cl.user_session.get("message_history")
     message_history.append(
@@ -187,7 +274,7 @@ async def main(message: cl.Message):
             "model": "gpt-4-1106-preview",
             # "model": "gpt-3.5-turbo",
             "temperature": 0.2,
-            "max_tokens": 256,
+            "max_tokens": 500,
             "top_p": 1,
             "frequency_penalty": 0,
             "presence_penalty": 0,
@@ -243,16 +330,33 @@ async def main(message: cl.Message):
                         arguments.get("currency_2"),
                         arguments.get("amount"),
                     )
+
+                # if function_name == "store_budget_old":
+                #     function_response = store_budget_old(
+                #         arguments.get("vakacio"),
+                #         arguments.get("fizetes"),
+                #         arguments.get("torleszto"),
+                #     )
+                #     budget_json = function_response
+
                 if function_name == "store_budget":
                     function_response = store_budget(
-                        arguments.get("vakacio"),
+                        arguments.get("befektetes"),
                         arguments.get("fizetes"),
                         arguments.get("torleszto"),
+                        arguments.get("lakber"),
+                        arguments.get("ismetlodo"),
+                        arguments.get("nyaralas"),
                     )
                     budget_json = function_response
 
                 if function_name == "calculate_budget":
                     function_response = calculate_budget(budget_json)
+
+                if function_name == "plan_vacation":
+                    function_response = plan_vacation(
+                        budget_json, arguments.get("nyaralas_ido")
+                    )
 
                 if function_name == "get_balance_of_latest_month":
                     function_response = get_balance_of_latest_month()
