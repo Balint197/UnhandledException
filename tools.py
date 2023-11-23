@@ -6,7 +6,7 @@ def get_conversion_rate_of_currencies(currency_1, currency_2, amount):
     """Get the current conversion rate between two currencies"""
     currency_1 = currency_1.upper()
     currency_2 = currency_2.upper()
-    api_key = "cur_live_O8lr4Uj4Nq0TeugOVUwxDg7ruGMhclEJtFTFsfGr"  # your https://currencyapi.com/docs/convert API key
+    api_key = ""  # your https://currencyapi.com/docs/convert API key
     url = "https://api.currencyapi.com/v3/latest"
     headers = {
         "apikey": api_key,
@@ -112,6 +112,9 @@ def calculate_budget(budget_json):
 
     # Calculate remaining budget after deducting monthly loan
     monthly_free_budget = budget["bevetel"] - budget["kiadas"]
+
+    if monthly_free_budget > 0:
+        monthly_free_budget = "Túl sokat költöttél!"
 
     # format as string
     return str(monthly_free_budget)

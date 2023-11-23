@@ -1,16 +1,14 @@
 import chainlit as cl
 from chainlit.prompt import Prompt, PromptMessage
 from chainlit.playground.providers.openai import ChatOpenAI
-import re, json, requests
 from datetime import datetime, timedelta
 import ast
 from openai import AsyncOpenAI
-import re, json, os
 
 from tools import *
 
 
-client = AsyncOpenAI(api_key="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")
+client = AsyncOpenAI(api_key="")
 
 MAX_ITER = 3  # how many times does it try to use tools in case of failure
 budget_json = None
@@ -153,30 +151,30 @@ tools = [
         "type": "function",
         "function": {
             "name": "plan_vacation",
-            "description": "Megtervezi a felhasználó nyaralását. Megadja azt az összeget, amit havonta félre kell raknia a felhasználónak, hogy ki tudja fizetni a nyaralást. ",
+            "description": "Megtervezi a felhasználó nyaralásához félretevendő havi összeget. ",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "nyaralas_ido": {
                         "type": "number",
-                        "description": "Kifejezi, hogy a tervezett nyaralás hány hónap múlva valósuljon meg",
+                        "description": "Megadja, hogy a tervezett nyaralás hány hónap múlva valósuljon meg",
                     },
                 },
                 "required": ["nyaralas_ido"],
             },
         },
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_balance_of_latest_month",
-            "description": "A legutóbbi hónapban keletkezett bevételek és kiadások egyenlegét adja meg",
-            "parameters": {
-                "type": "object",
-                "properties": {},
-            },
-        },
-    },
+    # {
+    #     "type": "function",
+    #     "function": {
+    #         "name": "get_balance_of_latest_month",
+    #         "description": "A legutóbbi hónapban keletkezett bevételek és kiadások egyenlegét adja meg",
+    #         "parameters": {
+    #             "type": "object",
+    #             "properties": {},
+    #         },
+    #     },
+    # },
 ]
 
 
@@ -358,8 +356,8 @@ async def main(message: cl.Message):
                         budget_json, arguments.get("nyaralas_ido")
                     )
 
-                if function_name == "get_balance_of_latest_month":
-                    function_response = get_balance_of_latest_month()
+#                if function_name == "get_balance_of_latest_month":
+#                    function_response = get_balance_of_latest_month()
 
                 message_history.append(
                     {
